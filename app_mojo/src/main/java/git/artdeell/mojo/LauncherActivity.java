@@ -323,13 +323,3 @@ public class LauncherActivity extends BaseActivity {
     }
 
     // Stuff all the view boilerplate here
-mWikiButton.setOnClickListener(v -> {
-    new android.app.AlertDialog.Builder(this)
-        .setTitle("Cubelauncher Hakkında")
-        .setMessage("Bu launcher, tamamen MJ-Mojo Launcher altyapısı ve mirası üzerine inşa edilmiştir.\n\n" +
-                    "• Altyapı Sahibi: MJ-Mojo Launcher\n" +
-                    "• Geliştiren & Düzenleyen: Cubelauncher\n\n" +
-                    "Açık kaynak mirasına sadık kalınarak hazırlanmıştır.")
-        .setPositiveButton("Tamam", (dialog, which) -> dialog.dismiss())
-        .show();
-});
