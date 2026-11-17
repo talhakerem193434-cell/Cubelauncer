@@ -322,4 +322,10 @@ public class LauncherActivity extends BaseActivity {
                 .apply();
     }
 
-    // Stuff all the view boilerplate here
+    /** Stuff all the view boilerplate here */
+    private void bindViews(){
+        mFragmentView = findViewById(R.id.container_fragment);
+        mSettingsButton = findViewById(R.id.setting_button);
+        mProgressLayout = findViewById(R.id.progress_layout);
+    }
+}
