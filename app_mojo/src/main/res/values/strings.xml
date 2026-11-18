@@ -433,7 +433,7 @@
     <string name="controller_remapper_expand_entry">Expand to change keycodes</string>
     <string name="preference_remap_controller_title">Change controller key bindings</string>
     <string name="preference_remap_controller_description">Allows you to modify the keyboard keys bound to each controller button</string>
-    <string name="mcl_button_social_media">Discord</string>
+    <string name="mcl_button_social_media">Mods</string>
     <string name="ltw_render_distance_warning_msg">Your GPU is not capable of rendering above 7 render distance without Sodium or other similar mods. The render distance will be automatically reduced when you click "OK".</string>
     <string name="mcl_button_open_directory">Open game directory</string>
     <string name="social_media_invite" translatable="false">https://modrinth.com/mods</string>
