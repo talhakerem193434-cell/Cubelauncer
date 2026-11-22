@@ -39,7 +39,10 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -47,13 +50,14 @@ import java.util.Set;
 
 /**
  * Modrinth mod browser with a card based layout.
- * Search, install, one-tap update, and automatic download of required dependencies.
+ * Search, install, one-tap update, installed mods list with delete, and automatic
+ * download of required dependencies.
  * The whole UI is built in code, so no layout XML is needed.
  */
 public class ModBrowserFragment extends Fragment {
     public static final String TAG = "ModBrowserFragment";
 
-    private static final String USER_AGENT = "talhakerem193434-cell/CubeLaunch/0.3";
+    private static final String USER_AGENT = "talhakerem193434-cell/CubeLaunch/0.4";
     private static final String API = "https://api.modrinth.com/v2";
     private static final String CDN_PREFIX = "https://cdn.modrinth.com/";
     private static final String[] LOADERS = {"fabric", "forge", "neoforge", "quilt"};
@@ -116,6 +120,22 @@ public class ModBrowserFragment extends Fragment {
         if (n >= 1000000L) return String.format(java.util.Locale.US, "%.1f Mn", n / 1000000.0);
         if (n >= 1000L) return String.format(java.util.Locale.US, "%.1f B", n / 1000.0);
         return String.valueOf(n);
+    }
+
+    private Button styledActionButton(String text) {
+        Button b = new Button(requireContext());
+        b.setText(text);
+        b.setTextSize(12);
+        b.setTextColor(Color.parseColor(COLOR_GREEN));
+        b.setBackground(rounded(COLOR_CHIP, 22));
+        return b;
+    }
+
+    private static String formatSize(long bytes) {
+        if (bytes >= 1024L * 1024L) {
+            return String.format(java.util.Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0));
+        }
+        return String.format(java.util.Locale.US, "%d KB", Math.max(1L, bytes / 1024L));
     }
 
     private static String cleanVersion(String raw) {
@@ -211,14 +231,24 @@ public class ModBrowserFragment extends Fragment {
         root.addView(chipScroll, lp(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 8));
 
-        // One-tap update button
-        Button updateButton = new Button(requireContext());
-        updateButton.setText("MODLARI G\u00dcNCELLE");
-        updateButton.setTextSize(13);
-        updateButton.setTextColor(Color.parseColor(COLOR_GREEN));
-        updateButton.setBackground(rounded(COLOR_CHIP, 24));
+        // Action row: one-tap update + installed mods
+        LinearLayout actionRow = new LinearLayout(requireContext());
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button updateButton = styledActionButton("G\u00dcNCELLE");
         updateButton.setOnClickListener(v -> startUpdate());
-        root.addView(updateButton, lp(ViewGroup.LayoutParams.MATCH_PARENT, dp(44), 8));
+        LinearLayout.LayoutParams updateParams = new LinearLayout.LayoutParams(0, dp(44), 1f);
+        updateParams.rightMargin = dp(4);
+        actionRow.addView(updateButton, updateParams);
+
+        Button installedButton = styledActionButton("Y\u00dcKL\u00dc MODLAR");
+        installedButton.setOnClickListener(v -> showInstalled());
+        LinearLayout.LayoutParams installedParams = new LinearLayout.LayoutParams(0, dp(44), 1f);
+        installedParams.leftMargin = dp(4);
+        actionRow.addView(installedButton, installedParams);
+
+        root.addView(actionRow, lp(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 8));
 
         // Results list (scrolls)
         ScrollView scroll = new ScrollView(requireContext());
@@ -506,6 +536,109 @@ public class ModBrowserFragment extends Fragment {
             }
         }
         return count;
+    }
+
+    // ---------- installed mods ----------
+
+    private void showInstalled() {
+        if (mBusy) {
+            setStatus("Bir i\u015flem s\u00fcr\u00fcyor, l\u00fctfen bekle.");
+            return;
+        }
+        mBusy = true;
+        setWorking(true);
+        setStatus("Y\u00fckl\u00fc modlar okunuyor...");
+        new Thread(() -> {
+            try {
+                Instance instance = Instances.loadSelectedInstance();
+                if (instance == null) throw new Exception("Se\u00e7ili profil yok");
+                File modsDir = new File(instance.getGameDirectory(), "mods");
+                File[] jars = modsDir.listFiles((dir, name) -> name.endsWith(".jar"));
+                final List<File> list = new ArrayList<>();
+                if (jars != null) {
+                    Arrays.sort(jars, (x, y) -> x.getName().compareToIgnoreCase(y.getName()));
+                    list.addAll(Arrays.asList(jars));
+                }
+                ui(() -> renderInstalled(list));
+            } catch (Exception e) {
+                final String msg = "Hata: " + e.getMessage();
+                ui(() -> setStatus(msg));
+            } finally {
+                mBusy = false;
+                ui(() -> setWorking(false));
+            }
+        }).start();
+    }
+
+    private void renderInstalled(List<File> list) {
+        mResults.removeAllViews();
+        if (list.isEmpty()) {
+            setStatus("mods klas\u00f6r\u00fcnde mod yok.");
+            return;
+        }
+        long total = 0L;
+        for (File f : list) total += f.length();
+        setStatus(list.size() + " y\u00fckl\u00fc mod, toplam " + formatSize(total)
+                + ". Silmek i\u00e7in S\u0130L'e dokun.");
+        for (File f : list) addInstalledRow(f);
+    }
+
+    private void addInstalledRow(final File file) {
+        final LinearLayout row = new LinearLayout(requireContext());
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setBackground(rounded(COLOR_CARD, 14));
+        row.setPadding(dp(12), dp(12), dp(12), dp(12));
+
+        LinearLayout textCol = new LinearLayout(requireContext());
+        textCol.setOrientation(LinearLayout.VERTICAL);
+
+        TextView nameView = new TextView(requireContext());
+        nameView.setText(file.getName());
+        nameView.setTextSize(14);
+        nameView.setTextColor(Color.WHITE);
+        nameView.setSingleLine(true);
+        nameView.setEllipsize(TextUtils.TruncateAt.MIDDLE);
+        textCol.addView(nameView);
+
+        TextView sizeView = new TextView(requireContext());
+        sizeView.setText(formatSize(file.length()));
+        sizeView.setTextSize(12);
+        sizeView.setTextColor(Color.parseColor(COLOR_MUTED));
+        textCol.addView(sizeView);
+
+        LinearLayout.LayoutParams textParams = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        textParams.rightMargin = dp(8);
+        row.addView(textCol, textParams);
+
+        Button delete = new Button(requireContext());
+        delete.setText("S\u0130L");
+        delete.setTextSize(13);
+        delete.setTextColor(Color.WHITE);
+        delete.setBackground(rounded("#8C2F2F", 20));
+        delete.setOnClickListener(v -> confirmDelete(file, row));
+        row.addView(delete, new LinearLayout.LayoutParams(dp(72), dp(40)));
+
+        mResults.addView(row, lp(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 8));
+    }
+
+    private void confirmDelete(final File file, final View row) {
+        new android.app.AlertDialog.Builder(requireContext())
+                .setTitle("Modu sil")
+                .setMessage(file.getName() + " silinsin mi?\n\n"
+                        + "Ba\u015fka modlar buna ba\u011fl\u0131 olabilir, silersen oyun a\u00e7\u0131lmayabilir.")
+                .setPositiveButton("Sil", (d, w) -> {
+                    if (file.delete()) {
+                        mResults.removeView(row);
+                        setStatus(file.getName() + " silindi.");
+                    } else {
+                        setStatus("Silinemedi: " + file.getName());
+                    }
+                })
+                .setNegativeButton("Vazge\u00e7", null)
+                .show();
     }
 
     // ---------- update ----------
