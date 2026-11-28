@@ -57,7 +57,7 @@ import java.util.Set;
 public class ModBrowserFragment extends Fragment {
     public static final String TAG = "ModBrowserFragment";
 
-    private static final String USER_AGENT = "talhakerem193434-cell/CubeLaunch/0.4";
+    private static final String USER_AGENT = "talhakerem193434-cell/CubeLaunch/0.5";
     private static final String API = "https://api.modrinth.com/v2";
     private static final String CDN_PREFIX = "https://cdn.modrinth.com/";
     private static final String[] LOADERS = {"fabric", "forge", "neoforge", "quilt"};
@@ -75,6 +75,7 @@ public class ModBrowserFragment extends Fragment {
     private EditText mVersion;
     private TextView[] mChips;
     private TextView mStatus;
+    private TextView mProfileInfo;
     private ProgressBar mProgress;
     private LinearLayout mResults;
     private volatile boolean mBusy = false;
@@ -160,6 +161,14 @@ public class ModBrowserFragment extends Fragment {
         title.setTextColor(Color.WHITE);
         root.addView(title, lp(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 0));
+
+        // Detected profile info
+        mProfileInfo = new TextView(requireContext());
+        mProfileInfo.setTextSize(12);
+        mProfileInfo.setTextColor(Color.parseColor(COLOR_GREEN));
+        mProfileInfo.setText("Profil okunuyor...");
+        root.addView(mProfileInfo, lp(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 4));
 
         // Search row: rounded input + green button
         LinearLayout searchRow = new LinearLayout(requireContext());
@@ -287,6 +296,8 @@ public class ModBrowserFragment extends Fragment {
         stripParams.rightMargin = -dp(16);
         root.addView(strip, stripParams);
 
+        autoDetectProfile();
+
         return root;
     }
 
@@ -296,6 +307,92 @@ public class ModBrowserFragment extends Fragment {
             mChips[i].setBackground(rounded(selected ? COLOR_GREEN : COLOR_CHIP, 20));
             mChips[i].setTextColor(Color.parseColor(selected ? COLOR_GREEN_DARK_TEXT : "#FFFFFF"));
         }
+    }
+
+    // ---------- profile detection ----------
+
+    private void setProfileInfo(String text) {
+        if (mProfileInfo != null) mProfileInfo.setText(text);
+    }
+
+    /** Reads a (possibly non-public, possibly inherited) String field without needing its visibility. */
+    private static String readStringField(Object obj, String fieldName) {
+        Class<?> c = obj.getClass();
+        while (c != null) {
+            try {
+                java.lang.reflect.Field f = c.getDeclaredField(fieldName);
+                f.setAccessible(true);
+                Object v = f.get(obj);
+                return (v instanceof String) ? (String) v : null;
+            } catch (NoSuchFieldException e) {
+                c = c.getSuperclass();
+            } catch (Exception e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /** Finds the Minecraft version inside a launcher version id like "1.20.1-forge-47.4.5". */
+    private static String detectMinecraftVersion(String versionId) {
+        if (versionId == null) return "";
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("(?<![0-9.])1\\.\\d{1,2}(?:\\.\\d{1,2})?(?![0-9.])")
+                .matcher(versionId);
+        if (m.find()) return m.group();
+        // NeoForge ids look like neoforge-21.1.172 (21.1 means Minecraft 1.21.1)
+        java.util.regex.Matcher n = java.util.regex.Pattern
+                .compile("neoforge-(\\d{2})\\.(\\d{1,2})")
+                .matcher(versionId.toLowerCase(java.util.Locale.US));
+        if (n.find()) {
+            String minor = n.group(2);
+            return "0".equals(minor) ? "1." + n.group(1) : "1." + n.group(1) + "." + minor;
+        }
+        return "";
+    }
+
+    /** Returns the index into LOADERS, or -1 when no mod loader is recognised. */
+    private static int detectLoaderIndex(String versionId) {
+        if (versionId == null) return -1;
+        String v = versionId.toLowerCase(java.util.Locale.US);
+        if (v.contains("neoforge")) return 2;
+        if (v.contains("quilt")) return 3;
+        if (v.contains("fabric")) return 0;
+        if (v.contains("forge")) return 1;
+        return -1;
+    }
+
+    private void autoDetectProfile() {
+        new Thread(() -> {
+            try {
+                Instance instance = Instances.loadSelectedInstance();
+                if (instance == null) {
+                    ui(() -> setProfileInfo("Se\u00e7ili profil yok."));
+                    return;
+                }
+                final String versionId = readStringField(instance, "versionId");
+                final String profileName = readStringField(instance, "name");
+                final String mc = detectMinecraftVersion(versionId);
+                final int loaderIdx = detectLoaderIndex(versionId);
+                ui(() -> {
+                    if (!mc.isEmpty()) mVersion.setText(mc);
+                    if (loaderIdx >= 0) {
+                        mLoaderIndex = loaderIdx;
+                        styleChips();
+                    }
+                    String info = "Profil: " + (profileName == null ? "?" : profileName)
+                            + "  \u00b7  S\u00fcr\u00fcm: " + (mc.isEmpty() ? "okunamad\u0131" : mc)
+                            + "  \u00b7  Y\u00fckleyici: "
+                            + (loaderIdx >= 0 ? LOADER_LABELS[loaderIdx] : "bulunamad\u0131");
+                    if (mc.isEmpty() || loaderIdx < 0) {
+                        info += "\nEksik olan\u0131 a\u015fa\u011f\u0131dan elle ayarla.";
+                    }
+                    setProfileInfo(info);
+                });
+            } catch (Exception e) {
+                ui(() -> setProfileInfo("Profil okunamad\u0131, s\u00fcr\u00fcm\u00fc elle yaz."));
+            }
+        }).start();
     }
 
     // ---------- search ----------
